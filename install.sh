@@ -9,11 +9,12 @@
 #   - Arch Linux and other rolling distros
 #   - Immutable / read-only root filesystems (no sudo required)
 #
-# Installs Happ Desktop into ~/.local (XDG user prefix).
+# Installs Happ Desktop into ~/.local; configures happd via sudo (TUN/VPN).
 
 set -Eeuo pipefail
 
-INSTALLER_VERSION="1.0.2"
+INSTALLER_VERSION="1.1.0"
+HAPPD_SERVICE_PATH="/etc/systemd/system/happd.service"
 UPSTREAM_REPO="Happ-proxy/happ-desktop"
 LATEST_API="https://api.github.com/repos/${UPSTREAM_REPO}/releases/latest"
 
@@ -178,6 +179,73 @@ install_happ_payload() {
 exec "${HAPP_BIN}" "\$@"
 EOF
   chmod +x "${BIN_DIR}/happ"
+  ensure_happ_executables
+}
+
+ensure_happ_executables() {
+  local path
+  for path in bin bin/core bin/tun bin/tun2 bin/antifilter; do
+    if [[ -d "${HAPP_OPT_DIR}/${path}" ]]; then
+      find "${HAPP_OPT_DIR}/${path}" -type f -exec chmod +x {} + 2>/dev/null || true
+    fi
+  done
+}
+
+install_happd_service() {
+  local tmp_service
+
+  if ! command -v systemctl >/dev/null 2>&1; then
+    warn "systemctl not found; skipping happd (TUN mode may not work)"
+    return 0
+  fi
+
+  if ! command -v sudo >/dev/null 2>&1; then
+    warn "sudo not found; skipping happd (TUN mode may not work)"
+    return 0
+  fi
+
+  info "Configuring happd system service (sudo — needed for TUN/VPN)..."
+  if ! sudo -v; then
+    warn "sudo cancelled or failed; skipping happd (use proxy mode in Happ, or re-run installer)"
+    return 0
+  fi
+
+  sudo systemctl stop happd.service 2>/dev/null || true
+
+  tmp_service="$(mktemp "${TMPDIR:-/tmp}/happd-service.XXXXXX")"
+  cat > "${tmp_service}" <<EOF
+[Unit]
+Description=Happ Process Control Daemon
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=${HAPP_OPT_DIR}/bin/happd
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=false
+TimeoutStopSec=10s
+KillMode=mixed
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  sudo install -Dm644 "${tmp_service}" "${HAPPD_SERVICE_PATH}" \
+    || die "Failed to install ${HAPPD_SERVICE_PATH}"
+  rm -f "${tmp_service}"
+
+  sudo systemctl daemon-reload || die "systemctl daemon-reload failed"
+  sudo systemctl enable happd.service || warn "systemctl enable happd.service failed"
+  if sudo systemctl restart happd.service 2>/dev/null \
+    || sudo systemctl start happd.service 2>/dev/null; then
+    ok "happd.service is running (TUN / VPN mode)"
+  else
+    warn "happd.service installed but did not start — run: sudo systemctl status happd"
+  fi
 }
 
 install_icon() {
@@ -306,11 +374,11 @@ main() {
   archive_path="${TMP_DIR}/${archive_name}"
   mkdir -p "${STAGING_DIR}" "${BIN_DIR}" "${APP_DIR}"
 
-  info "[1/4] Downloading ${archive_name}..."
+  info "[1/5] Downloading ${archive_name}..."
   curl -fsSL --progress-bar -o "${archive_path}" "${pkg_url}" \
     || die "Download failed"
 
-  info "[2/4] Extracting package..."
+  info "[2/5] Extracting package..."
   "${TAR_EXTRACT[@]}" "${archive_path}" -C "${STAGING_DIR}"
 
   local desktop_src icon_src
@@ -318,8 +386,11 @@ main() {
   desktop_src="$(find_desktop_in_staging || true)"
   icon_src="$(find_icon_in_staging || true)"
 
-  info "[3/4] Installing to ${PREFIX}..."
+  info "[3/5] Installing to ${PREFIX}..."
   install_happ_payload
+
+  info "[4/5] Configuring system daemon..."
+  install_happd_service
 
   if [[ -n "${icon_src}" && -f "${icon_src}" ]]; then
     install_icon "${icon_src}"
@@ -336,7 +407,7 @@ main() {
 
   write_marker "${version}"
 
-  info "[4/4] Finalizing..."
+  info "[5/5] Finalizing..."
   ok "Happ ${version} installed successfully"
   echo
   echo "Next steps:"
@@ -344,8 +415,7 @@ main() {
   echo "  2. Right-click Happ -> Add to Steam."
   echo "  3. Launch Happ from Gaming Mode on Steam Deck."
   echo
-  echo "Compatible with SteamOS, Bazzite, ChimeraOS, and other immutable Linux systems."
-  echo "No sudo was used. Files are in: ${PREFIX}"
+  echo "App files: ${PREFIX}  |  TUN daemon: ${HAPPD_SERVICE_PATH}"
   echo
   echo "To remove: curl -fsSL https://raw.githubusercontent.com/DeadFlamingo/happ-steamdeck-installer/main/uninstall.sh | bash"
 }
