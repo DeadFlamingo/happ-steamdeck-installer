@@ -4,12 +4,13 @@
 
 set -Eeuo pipefail
 
-INSTALLER_VERSION="1.0.1"
+INSTALLER_VERSION="1.0.2"
 PREFIX="${HOME}/.local"
 BIN_PATH="${PREFIX}/bin/happ"
 DESKTOP_PATH="${PREFIX}/share/applications/happ.desktop"
 ICON_PATH="${PREFIX}/share/icons/hicolor/256x256/apps/happ.png"
 MARKER_DIR="${PREFIX}/share/happ-installer"
+HAPP_OPT_DIR="${PREFIX}/opt/happ"
 
 if [[ -t 1 ]] && command -v tput >/dev/null 2>&1 && [[ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]]; then
   C_GREEN='\033[0;32m'
@@ -27,10 +28,17 @@ echo
 
 removed=0
 
-if [[ -f "${BIN_PATH}" ]]; then
+if [[ -f "${BIN_PATH}" || -L "${BIN_PATH}" ]]; then
   rm -f "${BIN_PATH}"
   removed=1
   info "Removed ${BIN_PATH}"
+fi
+
+if [[ -d "${HAPP_OPT_DIR}" ]]; then
+  rm -rf "${HAPP_OPT_DIR}"
+  removed=1
+  info "Removed ${HAPP_OPT_DIR}"
+  rmdir "${PREFIX}/opt" 2>/dev/null || true
 fi
 
 if [[ -f "${DESKTOP_PATH}" ]]; then
