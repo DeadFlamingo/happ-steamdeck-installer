@@ -13,7 +13,7 @@
 
 set -Eeuo pipefail
 
-INSTALLER_VERSION="1.0.1"
+INSTALLER_VERSION="1.0.2"
 UPSTREAM_REPO="Happ-proxy/happ-desktop"
 LATEST_API="https://api.github.com/repos/${UPSTREAM_REPO}/releases/latest"
 
@@ -22,6 +22,8 @@ BIN_DIR="${PREFIX}/bin"
 APP_DIR="${PREFIX}/share/applications"
 ICON_DIR="${PREFIX}/share/icons/hicolor/256x256/apps"
 MARKER_FILE="${PREFIX}/share/happ-installer/installed.json"
+HAPP_OPT_DIR="${PREFIX}/opt/happ"
+HAPP_BIN="${HAPP_OPT_DIR}/bin/Happ"
 
 TMP_DIR=""
 STAGING_DIR=""
@@ -161,9 +163,21 @@ PY
 
 # --- install steps -----------------------------------------------------------
 
-install_binary() {
-  local src=$1
-  install -Dm755 "${src}" "${BIN_DIR}/happ"
+install_happ_payload() {
+  local opt_src="${STAGING_DIR}/opt/happ"
+
+  [[ -d "${opt_src}" ]] || die "Happ application tree not found in package: opt/happ"
+  [[ -f "${opt_src}/bin/Happ" ]] || die "Happ binary not found in package: opt/happ/bin/Happ"
+
+  rm -rf "${HAPP_OPT_DIR}"
+  mkdir -p "${PREFIX}/opt"
+  cp -a "${opt_src}" "${PREFIX}/opt/"
+
+  cat > "${BIN_DIR}/happ" <<EOF
+#!/usr/bin/env bash
+exec "${HAPP_BIN}" "\$@"
+EOF
+  chmod +x "${BIN_DIR}/happ"
 }
 
 install_icon() {
@@ -256,7 +270,8 @@ write_marker() {
   "installer_version": "${INSTALLER_VERSION}",
   "happ_version": "${version}",
   "installed_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "prefix": "${PREFIX}"
+  "prefix": "${PREFIX}",
+  "happ_opt": "${HAPP_OPT_DIR}"
 }
 EOF
 }
@@ -298,16 +313,13 @@ main() {
   info "[2/4] Extracting package..."
   "${TAR_EXTRACT[@]}" "${archive_path}" -C "${STAGING_DIR}"
 
-  local bin_src="${STAGING_DIR}/usr/bin/happ"
   local desktop_src icon_src
-
-  [[ -f "${bin_src}" ]] || die "Binary not found in package: usr/bin/happ"
 
   desktop_src="$(find_desktop_in_staging || true)"
   icon_src="$(find_icon_in_staging || true)"
 
   info "[3/4] Installing to ${PREFIX}..."
-  install_binary "${bin_src}"
+  install_happ_payload
 
   if [[ -n "${icon_src}" && -f "${icon_src}" ]]; then
     install_icon "${icon_src}"
