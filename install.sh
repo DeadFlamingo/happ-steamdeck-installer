@@ -13,7 +13,7 @@
 
 set -Eeuo pipefail
 
-INSTALLER_VERSION="1.0.0"
+INSTALLER_VERSION="1.0.1"
 UPSTREAM_REPO="Happ-proxy/happ-desktop"
 LATEST_API="https://api.github.com/repos/${UPSTREAM_REPO}/releases/latest"
 
@@ -168,12 +168,63 @@ install_binary() {
 
 install_icon() {
   local src=$1
-  mkdir -p "${ICON_DIR}"
-  install -Dm644 "${src}" "${ICON_DIR}/happ.png"
+  local size dir
+  for size in 48 128 256; do
+    dir="${PREFIX}/share/icons/hicolor/${size}x${size}/apps"
+    mkdir -p "${dir}"
+    install -Dm644 "${src}" "${dir}/happ.png"
+  done
 
   if command -v xdg-icon-resource >/dev/null 2>&1; then
     xdg-icon-resource install --novendor --size 256 "${ICON_DIR}/happ.png" happ 2>/dev/null || true
     xdg-icon-resource forceupdate 2>/dev/null || true
+  fi
+}
+
+find_desktop_in_staging() {
+  local candidate
+  for candidate in \
+    "${STAGING_DIR}/usr/share/applications/Happ.desktop" \
+    "${STAGING_DIR}/usr/share/applications/happ.desktop"; do
+    if [[ -f "${candidate}" ]]; then
+      echo "${candidate}"
+      return 0
+    fi
+  done
+  find "${STAGING_DIR}" -type f -path '*/share/applications/*.desktop' \
+    \( -iname 'happ.desktop' -o -iname 'Happ.desktop' \) 2>/dev/null | head -n1
+}
+
+find_icon_in_staging() {
+  local candidate="${STAGING_DIR}/usr/share/icons/hicolor/256x256/apps/happ.png"
+  if [[ -f "${candidate}" ]]; then
+    echo "${candidate}"
+    return 0
+  fi
+  find "${STAGING_DIR}" -type f -path '*/share/icons/*/apps/happ.png' 2>/dev/null | head -n1
+}
+
+write_desktop_entry_fallback() {
+  local dest="${APP_DIR}/happ.desktop"
+  local exec_path="${BIN_DIR}/happ"
+
+  mkdir -p "${APP_DIR}"
+  cat > "${dest}" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Happ
+Exec=${exec_path} %f
+Icon=happ
+Categories=Network;Utility;
+Terminal=false
+EOF
+
+  if command -v xdg-desktop-menu >/dev/null 2>&1; then
+    xdg-desktop-menu install --novendor "${dest}" 2>/dev/null || true
+  fi
+
+  if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "${APP_DIR}" 2>/dev/null || true
   fi
 }
 
@@ -248,24 +299,27 @@ main() {
   "${TAR_EXTRACT[@]}" "${archive_path}" -C "${STAGING_DIR}"
 
   local bin_src="${STAGING_DIR}/usr/bin/happ"
-  local desktop_src="${STAGING_DIR}/usr/share/applications/happ.desktop"
-  local icon_src="${STAGING_DIR}/usr/share/icons/hicolor/256x256/apps/happ.png"
+  local desktop_src icon_src
 
   [[ -f "${bin_src}" ]] || die "Binary not found in package: usr/bin/happ"
+
+  desktop_src="$(find_desktop_in_staging || true)"
+  icon_src="$(find_icon_in_staging || true)"
 
   info "[3/4] Installing to ${PREFIX}..."
   install_binary "${bin_src}"
 
-  if [[ -f "${icon_src}" ]]; then
+  if [[ -n "${icon_src}" && -f "${icon_src}" ]]; then
     install_icon "${icon_src}"
   else
     warn "Icon not found in package; launcher may use a generic icon"
   fi
 
-  if [[ -f "${desktop_src}" ]]; then
+  if [[ -n "${desktop_src}" && -f "${desktop_src}" ]]; then
     install_desktop_entry "${desktop_src}"
   else
-    warn "Desktop entry not found in package; create ~/.local/share/applications/happ.desktop manually"
+    warn "Desktop entry not found in package; creating a minimal launcher"
+    write_desktop_entry_fallback
   fi
 
   write_marker "${version}"
