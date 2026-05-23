@@ -4,7 +4,7 @@
 
 set -Eeuo pipefail
 
-INSTALLER_VERSION="1.0.0"
+INSTALLER_VERSION="1.0.1"
 PREFIX="${HOME}/.local"
 BIN_PATH="${PREFIX}/bin/happ"
 DESKTOP_PATH="${PREFIX}/share/applications/happ.desktop"
@@ -42,14 +42,15 @@ if [[ -f "${DESKTOP_PATH}" ]]; then
   info "Removed ${DESKTOP_PATH}"
 fi
 
-if [[ -f "${ICON_PATH}" ]]; then
-  if command -v xdg-icon-resource >/dev/null 2>&1; then
-    xdg-icon-resource uninstall --novendor --size 256 happ 2>/dev/null || true
-    xdg-icon-resource forceupdate 2>/dev/null || true
-  fi
-  rm -f "${ICON_PATH}"
+while IFS= read -r -d '' icon_file; do
+  rm -f "${icon_file}"
   removed=1
-  info "Removed ${ICON_PATH}"
+  info "Removed ${icon_file}"
+done < <(find "${PREFIX}/share/icons" -type f -name 'happ.png' -print0 2>/dev/null)
+
+if command -v xdg-icon-resource >/dev/null 2>&1; then
+  xdg-icon-resource uninstall --novendor --size 256 happ 2>/dev/null || true
+  xdg-icon-resource forceupdate 2>/dev/null || true
 fi
 
 if [[ -d "${MARKER_DIR}" ]]; then
