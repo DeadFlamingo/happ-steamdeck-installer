@@ -1,9 +1,3 @@
-<p align="center">
-  <a href="https://github.com/Happ-proxy/happ-desktop">
-    <img src="https://opengraph.githubassets.com/1/Happ-proxy/happ-desktop" alt="Happ Desktop" width="96">
-  </a>
-</p>
-
 <h1 align="center">happ-steamdeck-installer</h1>
 
 <p align="center">
@@ -18,10 +12,6 @@
 
 <p align="center">
   One-command installer for <a href="https://github.com/Happ-proxy/happ-desktop">Happ Desktop</a> on <strong>SteamOS</strong>, <strong>Steam Deck</strong>, and other <strong>immutable Linux</strong> gaming distros — without <code>sudo</code> and without disabling the read-only root filesystem.
-</p>
-
-<p align="center">
-  <code>steam-deck</code> · <code>steamos</code> · <code>linux</code> · <code>installer</code> · <code>happ</code> · <code>immutable</code> · <code>bash</code>
 </p>
 
 ## Features
