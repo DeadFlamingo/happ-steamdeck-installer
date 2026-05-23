@@ -1,32 +1,60 @@
 #!/usr/bin/env bash
 #
-# Happ Desktop uninstaller (user install in ~/.local)
+# Happ Desktop uninstaller (user install in ~/.local + happd system service)
 
 set -Eeuo pipefail
 
-INSTALLER_VERSION="1.0.2"
+INSTALLER_VERSION="1.1.0"
 PREFIX="${HOME}/.local"
 BIN_PATH="${PREFIX}/bin/happ"
 DESKTOP_PATH="${PREFIX}/share/applications/happ.desktop"
-ICON_PATH="${PREFIX}/share/icons/hicolor/256x256/apps/happ.png"
 MARKER_DIR="${PREFIX}/share/happ-installer"
 HAPP_OPT_DIR="${PREFIX}/opt/happ"
+HAPPD_SERVICE_PATH="/etc/systemd/system/happd.service"
 
 if [[ -t 1 ]] && command -v tput >/dev/null 2>&1 && [[ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]]; then
   C_GREEN='\033[0;32m'
   C_BLUE='\033[0;34m'
+  C_YELLOW='\033[1;33m'
   C_RESET='\033[0m'
 else
-  C_GREEN='' C_BLUE='' C_RESET=''
+  C_GREEN='' C_BLUE='' C_YELLOW='' C_RESET=''
 fi
 
-info() { echo -e "${C_BLUE}==>${C_RESET} $*"; }
-ok()   { echo -e "${C_GREEN}==>${C_RESET} $*"; }
+info()  { echo -e "${C_BLUE}==>${C_RESET} $*"; }
+ok()    { echo -e "${C_GREEN}==>${C_RESET} $*"; }
+warn()  { echo -e "${C_YELLOW}warning:${C_RESET} $*" >&2; }
 
 echo -e "${C_BLUE}=== Happ Desktop Uninstaller v${INSTALLER_VERSION} ===${C_RESET}"
 echo
 
 removed=0
+
+remove_happd_service() {
+  if [[ ! -f "${HAPPD_SERVICE_PATH}" ]]; then
+    return 0
+  fi
+
+  if ! command -v sudo >/dev/null 2>&1 || ! command -v systemctl >/dev/null 2>&1; then
+    warn "Cannot remove ${HAPPD_SERVICE_PATH} automatically (need sudo and systemctl)"
+    return 0
+  fi
+
+  info "Removing happd system service (sudo)..."
+  if sudo -v; then
+    sudo systemctl disable --now happd.service 2>/dev/null || true
+    sudo rm -f "${HAPPD_SERVICE_PATH}"
+    sudo systemctl daemon-reload 2>/dev/null || true
+    removed=1
+    info "Removed ${HAPPD_SERVICE_PATH}"
+  else
+    warn "sudo failed — remove happd manually:"
+    echo "  sudo systemctl disable --now happd.service"
+    echo "  sudo rm -f ${HAPPD_SERVICE_PATH} && sudo systemctl daemon-reload"
+  fi
+}
+
+remove_happd_service
 
 if [[ -f "${BIN_PATH}" || -L "${BIN_PATH}" ]]; then
   rm -f "${BIN_PATH}"
@@ -71,7 +99,7 @@ if command -v update-desktop-database >/dev/null 2>&1; then
 fi
 
 if [[ "${removed}" -eq 0 ]]; then
-  echo "Nothing to remove — Happ does not appear to be installed in ${PREFIX}"
+  echo "Nothing to remove — Happ does not appear to be installed"
   exit 0
 fi
 
