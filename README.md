@@ -6,7 +6,6 @@
   <a href="https://store.steampowered.com/steamos"><img src="https://img.shields.io/badge/SteamOS-1B2838?style=flat&logo=steam&logoColor=white" alt="SteamOS"></a>
   <img src="https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black" alt="Linux">
   <img src="https://img.shields.io/badge/bash-installer-4EAA25?style=flat&logo=gnubash&logoColor=white" alt="Bash installer">
-  <img src="https://img.shields.io/badge/sudo-once-happd-blue?style=flat" alt="sudo for happd">
   <img src="https://img.shields.io/badge/arch-x86__64%20%7C%20aarch64-lightgrey?style=flat" alt="x86_64 and aarch64">
 </p>
 
